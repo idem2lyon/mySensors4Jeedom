@@ -2,7 +2,8 @@
  PROJECT: MySensors / RGB light NEOPIXEL
  PROGRAMMER: AWI
  DATE: october 10, 2015/ last update: october 14, 2015
- FILE: AWI_RGB.ino
+ FILE ORIGINAL: AWI_RGB.ino
+ FILE : CandleAlert.ino
  LICENSE: Public domain
 
  Hardware: Nano and MySensors 1.5, Wall light 16 WS2812B leds (neopixel)
