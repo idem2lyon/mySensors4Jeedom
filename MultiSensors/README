@@ -1,5 +1,6 @@
 Ce node permet d’avoir 5 capteurs en un seul. Température + Humidité + Luminosité + Présence + Ouverture
-Composants
+
+Composants :
     Arduino Mini ou Nano
     composant sans fil NRF24L01
     DHT22 pour la température
@@ -7,18 +8,17 @@ Composants
     Capteur de mouvement PIR
     Capteur d’ouverture de porte/fenêtre
 
-Schéma de montage
-
+Schéma de montage :
 Détecteur de mouvement sur D3
 DHT22 sur D4
 Détecteur d’ouverture sur D5 (remplacer prochainement par un gy-271 hmc5883)
 Détecteur de lumière sur A0
 
-Configuration
-
+Configuration :
 Pas de configuration avec ce noeud. Toutes les infos remontent automatiquement avec le widget adéquat.
 Cette version du sketch ne se réveille que sur détection de mouvement ou d'ouverture de porte. 
 
+Crédits :
 Merci à  Lunarok => https://github.com/lunarok/doc_mySensors_modules/blob/master/doc/fr_FR/MultiSensor.asciidoc
 Marci à Daniel => https://github.com/Bandenabos
 
