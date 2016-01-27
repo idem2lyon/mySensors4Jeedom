@@ -9,15 +9,18 @@
 #define CHILD_ID_LIGHT 3
 #define CHILD_ID_DOOR 4
 
+// For french friends !!!
+// Seuls les pin 2 et 3 peuvent être utilisés pour gérer les interruptions
 // Détecteur de lumière en pin 0 analogique
-// Détecteur de mouvement en pin 3 digital (important pour interruption)
-// Détecteur d’humidité / température en pin  4 digital
-// Boutton d’ouverture de porte en pin 2 (important pour interruption)
+// Boutton d’ouverture de porte en pin 2 digitale (important pour interruption)
+// Détecteur de mouvement en pin 3 digitale (important pour interruption)
+// Détecteur d’humidité / température en pin  4 digitale
+
 
 #define LIGHT_SENSOR_ANLAOG_PIN 0 // Analog input for light sensor
+#define BUTTON_PIN  2  // Arduino Digital I/O pin for button/reed switch => 2 for interrupt
 #define DIGITAL_INPUT_SENSOR 3   // The digital input you attached your motion sensor.  (Only 2 and 3 generates interrupt!)
 #define HUMIDITY_SENSOR_DIGITAL_PIN 4 // Digital input for DHT sensor
-#define BUTTON_PIN  2  // Arduino Digital I/O pin for button/reed switch => 2 for interrupt
 unsigned long SLEEP_TIME = 300000; // Sleep time between reads (in milliseconds)
 
 MySensor gw;
