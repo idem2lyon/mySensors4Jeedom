@@ -1,829 +1,395 @@
-
-
 /**
-
 * Gestion de la piscine :
-
 *
-
  * - 2 capteurs de température type Dallas 1 wire : un température entrant pac (température eau piscine), un de température sortant pac
-
 * - 1 capteur de détection filtration (pompe en marche)
-
 */
-
 #include <MySensor.h> 
-
 #include <SPI.h>
-
 #include <DallasTemperature.h>
-
 #include <DHT.h>
-
 #include <OneWire.h>
-
 #include <Bounce2.h>
 
- 
 
 /*************************************************************************/
-
 /**               PARAMETRES TEMPERATURE DALLAS                         **/
-
 #define           HAS_DALLAS           TRUE
-
 #define           CHILD_ID_DALLAS      0 
-
 #define           ONE_WIRE_DALLAS_TEMP 4 // Pin where dallase sensor is connected
-
- 
-
 #define           MAX_ATTACHED_DS18B20 16
-
- 
-
 unsigned long     lastDallasReadTime = millis();
-
 unsigned long     DALLAS_INTERVAL = 30000;       // Sleep time between reads (in milliseconds)
-
 OneWire           oneWire(ONE_WIRE_DALLAS_TEMP);  // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
-
 DallasTemperature sensors(&oneWire);    // Pass the oneWire reference to Dallas Temperature.
-
 float             lastDallasTemp[MAX_ATTACHED_DS18B20];
-
 int               nbDallasSensors    = 0;
-
 MyMessage         msgDallas(CHILD_ID_DALLAS, V_TEMP);
-
- 
-
 /***************************************************************************/
 
+
 /**           PARAMETERS TEMP/HUMIDITY DTH11                              **/
-
 #define           HAS_DTH11           FALSE
-
 int               CHILD_ID_DTH11_HUM  = -1;
-
 int               CHILD_ID_DTH11_TEMP = -1;
-
- 
-
 #define           DTH_11_DESCTIPTION  "Extérieur" 
-
 #define           DTH11_DIGITAL_PIN   8
-
- 
-
 DHT               dht;
-
 unsigned long     DTH11_INTERVAL = 30000;
-
 unsigned long     dth_period = (DTH11_INTERVAL < dht.getMinimumSamplingPeriod() ? dht.getMinimumSamplingPeriod() : DTH11_INTERVAL);
-
 MyMessage         msgHum;  //(CHILD_ID_DTH11_HUM,   V_HUM);
-
 MyMessage         msgTemp; //(CHILD_ID_DTH11_TEMP, V_TEMP);
-
 float             DTH11_lastTemp;
-
 float             DTH11_lastHum;
-
 unsigned long     lastDTH11ReadTime = millis();
-
- 
-
 /***************************************************************************/
 
 /***********            DIGITAL INPUTS                                     */
-
 /***************************************************************************/
-
 #define           HAS_DIGITAL_INPUT   TRUE
-
 int               digitalOldValues[2];
-
- 
-
 /***************************************************************************/
 
 /**                 PARAMETRE PAC                                          */
-
 int               CHILD_ID_PAC        = -1;
-
 #define           PAC_DIGITAL_PIN     7
-
 #define           PAC_RELAY_PIN       5
-
 #define           PAC_DESCRIPTION     "PAC on/off"
-
 Bounce            debouncerPAC        = Bounce();
-
 MyMessage         msgPAC;
-
- 
-
 /***************************************************************************/
 
 /**                 PARAMETRE FILTRATION                                   */
-
 int               CHILD_ID_PUMP       = -1;
-
 #define           PUMP_DIGITAL_PIN  6
-
-// Inversion de la valeur retournée si la mise à 0 correspond à une activation
-
 #define           PUMP_DESCRIPTION      "PUMP on/off"
-
 Bounce            debouncerPUMP = Bounce();
-
 MyMessage         msgPUMP;
-
- 
-
 /***************************************************************************/
 
 /**                 PARAMETRE DES RELAIS                                   */
-
 int               CHILD_ID_FIRST_RELAY = -1;
-
- 
-
 #define           RELAY_ON 1  // GPIO value to write to turn on attached relay
-
 #define           RELAY_OFF 0 // GPIO value to write to turn off attached relay
-
 #define           RELAY_NB            3 
-
 int               RELAY_PINS[]            = {2,3,PAC_RELAY_PIN};
-
 int               RELAY_MESSAGE_TYPE[]    ={S_LIGHT,  S_LIGHT,  S_LIGHT};
-
 char*             RELAY_DESCRIPTION[]      ={"Enable PAC",  "N/C",  "N/C"};
-
- 
-
 /***************************************************************************/
 
 /**                 PARAMETRES MySensor                                    */
-
 MySensor  gw;
-
- 
-
 boolean   receivedConfig  = false;
-
 boolean   metric          = true;
-
- 
-
 /********************************************************************************************************************************************************************/
 
 /************************************************************       INITIALISATIONS              ********************************************************************/
-
 /********************************************************************************************************************************************************************/
-
- 
-
 void setup() 
-
 {
-
    // Startup and initialize MySensors library. Set callback for incoming messages.
-
   gw.begin(incomingMessage, AUTO, false);
-
- 
-
-  // Send the sketch version information to the gateway and Controller
-
+   // Send the sketch version information to the gateway and Controller
   gw.sendSketchInfo("PoolMonitoring", "1.1");
 
-  
-
   if (HAS_DALLAS) {
-
     setupDallasSensors();
-
   }
-
- 
-
   if (HAS_DTH11) {
-
     setupDTH11();
-
   }
-
- 
-
   if (RELAY_NB > 0) {
-
     setupRelays();
-
   }
-
- 
-
   if (HAS_DIGITAL_INPUT) {
-
    setupInputs();
-
   }
-
- 
-
 }
 
  
-
 /**
-
 * Initialisation des sondes Dallas
-
 */
 
 void setupDallasSensors() {
-
   // Startup up the OneWire library
-
   sensors.begin();
-
- 
-
   // requestTemperatures() will not block current thread
-
   sensors.setWaitForConversion(false);
 
- 
-
- 
-
   // Fetch the number of attached temperature sensors 
-
   nbDallasSensors = sensors.getDeviceCount();
 
- 
-
   if (nbDallasSensors > MAX_ATTACHED_DS18B20) {
-
     nbDallasSensors = MAX_ATTACHED_DS18B20;
-
   }
-
- 
 
   // Present all sensors to controller
-
   for (int i = 0; i < nbDallasSensors; i++) {  
-
      gw.present(i, S_TEMP);
-
   }
-
 }
 
- 
-
 /**
-
 * Initialisation de la sonde DTH11 temp/humidité
-
  */
 
 void setupDTH11() {
-
- 
-
   // Setup dth11 library
-
   dht.setup(DTH11_DIGITAL_PIN);
 
- 
-
   // Initialize chid Id
-
   CHILD_ID_DTH11_HUM = nbDallasSensors;
 
-  
-
   // Register all sensors to gw (they will be created as child devices)
-
   gw.present(CHILD_ID_DTH11_HUM,  S_HUM);
-
   Serial.print("Setup DTH11 humidity as sensor N°");
-
   Serial.println(CHILD_ID_DTH11_HUM);
 
- 
-
   // Initialize message for wet sensor
-
   msgHum = MyMessage(CHILD_ID_DTH11_HUM, V_HUM);
-
- 
-
   CHILD_ID_DTH11_TEMP = CHILD_ID_DTH11_HUM + 1;
 
-  
-
   gw.present(CHILD_ID_DTH11_TEMP, S_TEMP, DTH_11_DESCTIPTION);
-
   Serial.print("Setup DTH11 temp as sensor N°");
-
   Serial.println(CHILD_ID_DTH11_TEMP);
-
-  
-
   Serial.print("Setup DTH11 a pin");
-
   Serial.println(DTH11_DIGITAL_PIN);
 
- 
-
   // Initialize message for temp sensor
-
   msgTemp = MyMessage(CHILD_ID_DTH11_TEMP, V_TEMP);
-
 }
 
- 
-
 /**
-
 * Initialisation des Relais
-
 */
 
 void setupRelays() {
-
- 
-
   // Define the first child id for relay
-
   CHILD_ID_FIRST_RELAY = CHILD_ID_DTH11_TEMP + 1;
 
-  
-
   // Initialisation des relais en fonction du tableau des id de pattes du relais
-
   for (int relayNumber = 0; relayNumber < RELAY_NB; relayNumber++) {
-
-   
-
     gw.present(CHILD_ID_FIRST_RELAY + relayNumber, RELAY_MESSAGE_TYPE[relayNumber], RELAY_DESCRIPTION[relayNumber], false);
-
-    
-
     Serial.print("Present relay as child Id N°");
-
     Serial.print(CHILD_ID_FIRST_RELAY + relayNumber);
-
     Serial.print(" / Type ");
-
     Serial.println(RELAY_MESSAGE_TYPE[relayNumber]);
 
- 
-
- 
-
     // Then set relay pins in output mode
-
     pinMode(RELAY_PINS[relayNumber], OUTPUT);  
 
- 
-
-        
-
     // Make sure relays are off when starting up
-
     digitalWrite(RELAY_PINS[relayNumber], RELAY_ON);
 
-    
-
     // Set relay to last known state (using eeprom storage)
-
     digitalWrite(RELAY_PINS[relayNumber], gw.loadState(CHILD_ID_FIRST_RELAY + relayNumber)? RELAY_ON : RELAY_OFF);
-
   }
-
 }
 
- 
-
- 
-
 /**
-
  * Setup basic inputs
-
  */
 
 void setupInputs(){
-
- 
-
   // Calculate child id dynamically
-
   // No realay ?
-
   if (CHILD_ID_FIRST_RELAY == -1) {
-
     // No DTH11 ? 
-
     if (CHILD_ID_DTH11_HUM == -1) {
-
       CHILD_ID_PAC = nbDallasSensors;
-
     } else {
-
       CHILD_ID_PAC = CHILD_ID_DTH11_TEMP  +1;
-
     }
-
   } else {
-
     CHILD_ID_PAC = CHILD_ID_FIRST_RELAY + RELAY_NB;
-
   }
 
- 
-
   CHILD_ID_PUMP = CHILD_ID_PAC + 1;
-
- 
-
   msgPAC = MyMessage(CHILD_ID_PAC, V_LIGHT);
 
   setupInput("PAC",  PAC_DIGITAL_PIN,   CHILD_ID_PAC, debouncerPAC, PAC_DESCRIPTION);
-
- 
-
   msgPUMP = MyMessage(CHILD_ID_PUMP, V_LIGHT);
-
   setupInput("PUMP", PUMP_DIGITAL_PIN,  CHILD_ID_PUMP, debouncerPUMP, PUMP_DESCRIPTION);
-
-  
-
 }
 
- 
-
 /**
-
 * Setup and present inputs
-
 */
 
 void setupInput(String description, int pinNumber, int childId, Bounce debouncer, char* sensorDescription) {
-
- 
-
   Serial.print("Init basic input for ");
-
   Serial.print(description);
-
   Serial.print(" | pin number ");
-
   Serial.print(pinNumber);
-
   Serial.print(" | child id ");
-
   Serial.println(childId);
 
-   
-
   // Setup the button
-
   pinMode(pinNumber, INPUT);
 
- 
-
   // Activate internal pull-up
-
   digitalWrite(pinNumber, HIGH);
 
- 
-
   // Create the debouncer
-
   debouncer.attach(pinNumber);
-
   debouncer.interval(5);
 
- 
-
   // Register all sensors to gw (they will be created as child devices)
-
   gw.present(childId, S_LIGHT, sensorDescription, false);
-
 }
 
- 
-
 /********************************************************************************************************************************************************************/
-
 /************************************************************       TRAITEMENTS                  ********************************************************************/
-
 /********************************************************************************************************************************************************************/
-
- 
 
 /**
-
 * Boulce de traitement
-
 */
-
 void loop()    
-
 {    
-
   // Process incoming messages (like config from server)
-
   gw.process();
-
- 
 
   unsigned long current = 0;
 
-  
-
   if (HAS_DALLAS) {
-
     current = millis();
 
-  
-
     // ON ne traite la lecture de température des sondes Dallas qu'au bout du temps DALLAS_INTERVAL
-
     if (lastDallasReadTime == 0 || ((current - lastDallasReadTime) < 0) ||  ((current - lastDallasReadTime) > DALLAS_INTERVAL)) {
-
- 
 
       loopDallasSensors();
 
- 
-
       //ON mémorise le last time
-
       lastDallasReadTime = current;
-
     }
-
   }
-
-  
 
   if (/*HAS_DTH11*/ false) {
-
     current = millis();
 
- 
-
     // ON ne traite la lecture de température et humidité du DTH11 qu'au bout du temps DTH11_INTERVAL
-
     if (lastDTH11ReadTime == 0 || ((current - lastDTH11ReadTime) < 0) ||  ((current - lastDTH11ReadTime) > dth_period)) {
-
        loopDTH11();
-
       //On mémorise la dernière mesure
-
       lastDTH11ReadTime = current;
-
     }
-
   }
-
- 
 
   // Loop relays
 
-  
-
   // Load digital inputs
-
   if (HAS_DIGITAL_INPUT) {
-
      loopDigitalInputs();
-
   }
-
 }
 
- 
-
 /**
-
 * Lecture des valeurs des sondes de température type Dallas (1 wire)
-
 */
-
 void loopDallasSensors() {   
-
     // Fetch temperatures from Dallas sensors
-
     sensors.requestTemperatures();
 
- 
-
     // query conversion time and sleep until conversion completed
-
     int16_t conversionTime = sensors.millisToWaitForConversion(sensors.getResolution());
 
- 
-
     // Read temperatures and send them to controller
-
     for (int i = 0; i < nbDallasSensors; i++) {
 
-     
-
       // Fetch and round temperature to one decimal
-
       float temperature = static_cast<float>(static_cast<int>((metric?sensors.getTempCByIndex(i) : sensors.getTempFByIndex(i)) * 10.)) / 10.;
 
-     
-
       // Only send data if temperature has changed and no error
-
       if (lastDallasTemp[i] != temperature && temperature != -127.00 && temperature != 85.00) {
 
        // Send in the new temperature
-
         gw.send(msgDallas.setSensor(i).set(temperature,1));
 
         // Save new temperatures for next compare
-
         lastDallasTemp[i]=temperature;
-
       }
-
     }
-
 }
 
- 
-
 /**
-
 * Lecture des valeurs de la sonde de température DTH11
-
 */
-
 void loopDTH11() { 
 
- 
-
   // Traitement de la température
-
   float temperature = dht.getTemperature();
 
- 
-
   if (isnan(temperature)) {
-
       Serial.println("Failed reading temperature from DHT");
-
   } else if (temperature != DTH11_lastTemp) {
 
     DTH11_lastTemp = temperature;
 
-  
-
     if (!metric) {
-
       temperature = dht.toFahrenheit(temperature);
-
     }
 
-   
-
     gw.send(msgTemp.set(temperature, 1));
-
     Serial.print("T: ");
-
     Serial.println(temperature);
-
   }
 
- 
-
   // Traitement de l'humidité
-
   float humidity = dht.getHumidity();
-
   if (isnan(humidity)) {
-
       Serial.println("Failed reading humidity from DHT");
-
   } else if (humidity != DTH11_lastHum) {
-
-     
 
       DTH11_lastHum = humidity;
 
-     
-
       gw.send(msgHum.set(humidity, 1));
 
-     
-
       Serial.print("H: ");
-
       Serial.println(humidity);
-
   }
-
 }
 
- 
-
 /**
-
  * Lecture des valeurs des entrées numériques
-
  */
-
 void loopDigitalInputs() {
-
   loopDigital(PAC_DIGITAL_PIN,  msgPAC, debouncerPAC);
-
   loopDigital(PUMP_DIGITAL_PIN, msgPUMP, debouncerPUMP);
-
 }
 
- 
-
 /**
-
  * Lecture des valeurs des entrées numériques
-
  */
-
 void loopDigital(int pinNumber, MyMessage message, Bounce l_debouncer) {
-
-  
 
   l_debouncer.update();
 
-  
-
   // Get the update value
-
- 
-
   int value = digitalRead(pinNumber);
 
-  
-
   if (value != digitalOldValues[pinNumber]) {
-
     gw.send(message.set(value == 0 ? false:true), true); // Send new state and request ack back
-
     Serial.print("DigitalInput");
-
     Serial.print(pinNumber);
-
     Serial.print( " value ");
-
     Serial.print(value == 0 ? false:true);
-
     Serial.print( " | digital value ");
-
     Serial.println(digitalRead(pinNumber));
-
   }
 
-  
-
-  
-
   digitalOldValues[pinNumber] = value;
-
 }
 
- 
-
 /**
-
  * Message provenant de la gateway
-
  */
-
 void incomingMessage(const MyMessage &message) {
 
- 
-
   // Messages de types interrupteur => action sur les relais
-
   Serial.println("Incoming change for sensor:");
-
   Serial.print(message.sensor);
-
   Serial.print(", type : ");
-
   Serial.println(message.type); 
-
 }
